@@ -1,22 +1,159 @@
 package data
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/s-devoe/greenlight-go/internal/validator"
 )
 
 type Movie struct {
-	ID        int64     `json:"id"`
-	CreatedAt time.Time `json:"-"`
-	Title     string    `json:"title"`
-	Year      int32     `json:"year,omitempty"`
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
+	Year  int32  `json:"year,omitempty"`
 	// Runtime   int32     `json:"-"`
-	Runtime Runtime  `json:"-"`
-	Genres  []string `json:"genres,omitempty"`
-	Version int32    `json:"version"`
+	Runtime   Runtime   `json:"-"`
+	Genres    []string  `json:"genres,omitempty"`
+	Version   int32     `json:"version"`
+	CreatedAt time.Time `json:"-"`
+}
+
+type MovieStore struct {
+	DB *pgxpool.Pool
+}
+
+type MockMovieStore struct{}
+
+func (m MovieStore) Insert(ctx context.Context, movie *Movie) error {
+	stmt := `INSERT INTO movies (title, year, runtime, genres)
+	VALUES ($1, $2, $3, $4)
+	RETURNING id, created_at, version`
+
+	c, cancel := context.WithTimeout(ctx, 10*time.Second)
+
+	defer cancel()
+
+	args := []interface{}{
+		movie.Title,
+		movie.Year,
+		movie.Runtime,
+		movie.Genres,
+	}
+	return m.DB.QueryRow(c, stmt, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
+
+}
+
+func (m MovieStore) Get(ctx context.Context, id int64) (*Movie, error) {
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
+	stmt := `SELECT id, title, year, runtime, genres, version, created_at 
+	FROM movies
+	WHERE id = $1`
+
+	c, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	defer cancel()
+
+	var movie Movie
+	row := m.DB.QueryRow(c, stmt, id)
+
+	err := row.Scan(
+		&[]byte{},
+		&movie.ID,
+		&movie.Title,
+		&movie.Year,
+		&movie.Runtime,
+		&movie.Genres,
+		&movie.Version,
+		&movie.CreatedAt,
+	)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, PgxErrRecordNotFound):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	return &movie, nil
+}
+
+func (m MovieStore) Update(ctx context.Context, movie *Movie) error {
+	stmt := `
+	UPDATE movies
+	SET title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
+	WHERE id = $5 AND version = $6
+	RETURNING version`
+	args := []interface{}{
+		movie.Title,
+		movie.Year,
+		movie.Runtime,
+		movie.Genres,
+		movie.ID,
+		movie.Version,
+	}
+
+	c, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	err := m.DB.QueryRow(c, stmt, args...).Scan(&movie.Version)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, PgxErrRecordNotFound):
+			return ErrUpdateConflict
+		default:
+			return err
+		}
+
+	}
+	return nil
+}
+
+func (m MovieStore) Delete(ctx context.Context, id int64) error {
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	stmt := `DELETE FROM movies WHERE id = $1`
+	// if  in the future i am wondering why i am using different contexts for the methods here, check Let's Go Further Chapter 8 last paragraph.
+	c, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	result, err := m.DB.Exec(c, stmt, id)
+
+	if err != nil {
+		return err
+	}
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+	return nil
+}
+
+// mock methods for unit testing
+func (m MockMovieStore) Insert(ctx context.Context, movie *Movie) error {
+	return nil
+}
+
+func (m MockMovieStore) Get(ctx context.Context, id int64) (*Movie, error) {
+	return nil, nil
+}
+
+func (m MockMovieStore) Update(ctx context.Context, movie *Movie) error {
+	return nil
+}
+
+func (m MockMovieStore) Delete(ctx context.Context, id int64) error {
+	return nil
 }
 
 // custom JSON Marshal for coverting runtime for the client JSON response
