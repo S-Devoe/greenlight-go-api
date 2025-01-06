@@ -1,8 +1,11 @@
 package validator
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+)
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+var EmailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
 type Validator struct {
 	// Errors map[string]string
@@ -22,7 +25,7 @@ func (v *Validator) Valid() bool {
 func (v *Validator) AddError(key, message string) {
 	// if _, exists := v.Errors[key]; !exists {
 	// v.Errors[key] = message
-	v.Errors = append(v.Errors, message)
+	v.Errors = append(v.Errors, fmt.Sprintf("'%s':%s", key, message))
 	// }
 }
 

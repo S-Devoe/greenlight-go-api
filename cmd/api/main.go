@@ -3,15 +3,16 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/s-devoe/greenlight-go/internal/data"
+	"github.com/s-devoe/greenlight-go/internal/jsonlog"
+	"github.com/s-devoe/greenlight-go/internal/mailer"
 )
 
 const version = "1.0.0"
@@ -22,12 +23,26 @@ type config struct {
 	db   struct {
 		dsn string
 	}
+	limiter struct {
+		rps     float64
+		burst   int
+		enabled bool
+	}
+	smtp struct {
+		host     string
+		port     int
+		username string
+		password string
+		sender   string
+	}
 }
 
 type application struct {
 	config config
-	logger *log.Logger
+	logger *jsonlog.Logger
 	store  data.Store
+	mailer mailer.Mailer
+	wg     sync.WaitGroup
 }
 
 // these are ment to be in .env
@@ -43,48 +58,51 @@ func main() {
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 	flag.StringVar(&cfg.db.dsn, "db-dsn", dbSource, "POSTGRESQL DSN")
+	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum request per seconds")
+	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 2525, "SMTP port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "d8e6e86f30e9f0", "SMTP username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "d16b2255b71d35", "SMTP password")
+	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.alexedwards.net>", "SMTP sender")
 
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
 	connPool, err := pgxpool.NewWithConfig(context.Background(), PgxConfig())
 	if err != nil {
 		log.Fatal("error while connecting to the database ", err)
+		logger.PrintFatal(err, nil)
 	}
 
 	connection, err := connPool.Acquire(context.Background())
 	if err != nil {
 		log.Fatal("error while aquiring connection to the database ", err)
+		logger.PrintFatal(err, nil)
 	}
 
 	err = connection.Ping(context.Background())
 	if err != nil {
 		log.Fatal("Could not ping database")
+		logger.PrintFatal(err, nil)
 	}
 
-	fmt.Println("database connection established")
-
 	defer connPool.Close()
+
+	logger.PrintInfo("database connection established", nil)
 
 	app := &application{
 		logger: logger,
 		config: cfg,
 		store:  data.NewStore(connPool),
+		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
 	}
 
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	}
+	err = app.serve()
 
-	logger.Printf("Starting %s server on %s", cfg.env, srv.Addr)
-	err = srv.ListenAndServe()
-
-	logger.Fatal(err)
+	logger.PrintFatal(err, nil)
 }
 
 func PgxConfig() *pgxpool.Config {

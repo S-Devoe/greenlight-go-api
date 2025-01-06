@@ -18,13 +18,18 @@ new_migration:
 	migrate create -ext sql -dir migrations -seq $(name)
 
 migrateup:
-	migrate -path migrations -database "postgresql://greenlight_user:pa55word@localhost:5432/greenlight?sslmode=disable" -verbose up
+	migrate -path migrations -database "postgresql://greenlight:greenlight1234@localhost:5432/greenlight?sslmode=disable" -verbose up
 
 migratedown:
 	migrate -path migrations -database "postgresql://greenlight:greenlight1234@localhost:5432/greenlight?sslmode=disable" -verbose down
 
+migrateup1:
+	migrate -path migrations -database "postgresql://greenlight:greenlight1234@localhost:5432/greenlight?sslmode=disable" -verbose up 1
 
-.PHONY: postgres start-docker-container start-docker-container createdb dropdb new_migration
+migratedown1:
+	migrate -path migrations -database "postgresql://greenlight:greenlight1234@localhost:5432/greenlight?sslmode=disable" -verbose down 1
+
+.PHONY: postgres start-docker-container start-docker-container createdb dropdb new_migration migrateup1 migratedown1
 
 # note
 # a subuser(a non super-user) was created to the postgres db with the following command:

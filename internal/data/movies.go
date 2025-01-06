@@ -28,6 +28,60 @@ type MovieStore struct {
 
 type MockMovieStore struct{}
 
+func (m MovieStore) GetAll(ctx context.Context, title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	stmt := fmt.Sprintf(`SELECT count(*) OVER(), id, title, year, runtime, genres, version 
+	FROM movies 
+	WHERE (STRPOS(LOWER(title), LOWER($1)) > 0 OR $1='') 
+	AND (genres @>$2 OR $2 ='{}')
+	ORDER BY %s %s, id  ASC
+	LIMIT $3
+	OFFSET $4`, filters.sortColumn(), filters.sortDirection())
+
+	c, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	args := []interface{}{
+		title,
+		genres,
+		filters.limit(),
+		filters.offset(),
+	}
+
+	rows, err := m.DB.Query(c, stmt, args...)
+	if err != nil {
+		return nil, Metadata{}, err
+	}
+
+	defer rows.Close()
+
+	totalRecords := 0
+	movies := []*Movie{}
+
+	for rows.Next() {
+		var movie Movie
+
+		err := rows.Scan(
+			&totalRecords,
+			&movie.ID,
+			&movie.Title,
+			&movie.Year,
+			&movie.Runtime,
+			&movie.Genres,
+			&movie.Version,
+		)
+		if err != nil {
+			return nil, Metadata{}, err
+		}
+
+		movies = append(movies, &movie)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, Metadata{}, err
+	}
+
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+	return movies, metadata, nil
+}
 func (m MovieStore) Insert(ctx context.Context, movie *Movie) error {
 	stmt := `INSERT INTO movies (title, year, runtime, genres)
 	VALUES ($1, $2, $3, $4)
@@ -154,6 +208,10 @@ func (m MockMovieStore) Update(ctx context.Context, movie *Movie) error {
 
 func (m MockMovieStore) Delete(ctx context.Context, id int64) error {
 	return nil
+}
+
+func (m MockMovieStore) GetAll(ctx context.Context, title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	return nil, Metadata{}, nil
 }
 
 // custom JSON Marshal for coverting runtime for the client JSON response

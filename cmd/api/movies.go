@@ -178,3 +178,43 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+type listMovieParams struct {
+	Title        string
+	Genres       []string
+	data.Filters // add the pagination types here
+}
+
+func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request) {
+	var params listMovieParams
+
+	v := validator.New()
+	qs := r.URL.Query()
+
+	params.Title = app.readString(qs, "title", "")
+	params.Genres = app.readCSV(qs, "genres", []string{})
+	params.Filters.Page = app.readInt(qs, "page", 1, v)
+	params.Filters.PageSize = app.readInt(qs, "page_size", 10, v)
+	params.Filters.Sort = app.readString(qs, "sort", "id")
+	params.Filters.SortSafeList = []string{"id", "title", "year", "runtime", "-id", "-title", "-runtime", "-year"}
+
+	if data.ValidateFilters(v, params.Filters); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	ctx := r.Context()
+
+	movies, metadata, err := app.store.Movies.GetAll(ctx, params.Title, params.Genres, params.Filters)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	err = app.writeJSON(w, http.StatusOK, envelope{"movies": movies, "metadata": metadata}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+}
