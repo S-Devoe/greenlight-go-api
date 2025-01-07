@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"time"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/s-devoe/greenlight-go/internal/validator"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var AnonymousUser = &User{}
 
 type User struct {
 	ID        int64     `json:"id"`
@@ -33,6 +36,55 @@ var (
 
 type UserStore struct {
 	DB *pgxpool.Pool
+}
+
+func (u *User) isAnonymous() bool {
+	return u == AnonymousUser
+}
+
+// get the user associated with a token
+func (s UserStore) GetForToken(tokenScope, tokenPlainText string) (*User, error) {
+	tokenHash := sha256.Sum256([]byte(tokenPlainText))
+
+	stmt := `
+	SELECT users.id, users.name, users.email, users.password_hash, users.activated, users.version, users.created_at
+	FROM users
+	INNER JOIN tokens
+	ON users.id = tokens.user_id
+	WHERE tokens.hash = $1
+	AND tokens.scope = $2
+	AND tokens.expiry > $3
+	`
+	args := []interface{}{
+		tokenHash[:],
+		tokenScope,
+		time.Now(),
+	}
+
+	var user User
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	err := s.DB.QueryRow(ctx, stmt, args...).Scan(
+		&user.ID,
+		&user.Name,
+		&user.Email,
+		&user.Password.hash,
+		&user.Activated,
+		&user.Version,
+		&user.CreatedAt,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, PgxErrRecordNotFound):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+
+	return &user, nil
+
 }
 
 func (s *UserStore) Insert(ctx context.Context, user *User) error {
