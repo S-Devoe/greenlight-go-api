@@ -5,16 +5,18 @@ import (
 )
 
 type Store struct {
-	Movies MovieStore
-	Users  UserStore
-	Tokens TokenStore
+	Movies      MovieStore
+	Users       UserStore
+	Tokens      TokenStore
+	Permissions PermissionStore
 }
 
 func NewStore(db *pgxpool.Pool) Store {
 	return Store{
-		Movies: MovieStore{DB: db},
-		Users:  UserStore{DB: db},
-		Tokens: TokenStore{DB: db},
+		Movies:      MovieStore{DB: db},
+		Users:       UserStore{DB: db},
+		Tokens:      TokenStore{DB: db},
+		Permissions: PermissionStore{DB: db},
 	}
 }
 
