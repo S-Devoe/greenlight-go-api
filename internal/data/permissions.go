@@ -24,11 +24,23 @@ type PermissionStore struct {
 	DB *pgxpool.Pool
 }
 
+func (s PermissionStore) AddPermissionsForUser(userId int64, codes ...string) error {
+	stmt := `
+	INSERT INTO users_permissions 
+	SELECT $1, permissions.id FROM permissions WHERE permissions.code = ANY($2)
+	`
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	_, err := s.DB.Exec(ctx, stmt, userId, codes)
+	return err
+}
+
 func (s PermissionStore) GetAllPermissionsForUser(userId int64) (Permissions, error) {
 	stmt := `
     SELECT permissions.code
     FROM permissions 
-    INNER JOIN users_permissions ON users_permissions.permission_id = permissions.id
+    INNER JOIN users_permissions ON users_permissions.permissions_id = permissions.id
     INNER JOIN users ON users_permissions.user_id = users.id
     WHERE users.id = $1`
 
