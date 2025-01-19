@@ -2,17 +2,38 @@ package main
 
 import (
 	"errors"
+	"expvar"
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/s-devoe/greenlight-go/internal/data"
 	"github.com/s-devoe/greenlight-go/internal/validator"
 	"golang.org/x/time/rate"
 )
+
+func (app *application) metrics(next http.Handler) http.Handler {
+	totalRequestsReceived := expvar.NewInt("total_requests_received")
+	totalResponsesSent := expvar.NewInt("total_responses_sent")
+	totalProcessingTimeMicroseconds := expvar.NewInt("total_processing_time_microseconds")
+	totalResponsesSentByStatus := expvar.NewMap("total_responses_sent_by_status")
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		totalRequestsReceived.Add(1)
+		metrics := httpsnoop.CaptureMetrics(next, w, r)
+
+		totalResponsesSent.Add(1)
+
+		totalProcessingTimeMicroseconds.Add(metrics.Duration.Microseconds())
+		totalResponsesSentByStatus.Add(strconv.Itoa(metrics.Code), 1)
+	})
+}
 
 func (app *application) requirePermission(code string, next http.HandlerFunc) http.HandlerFunc {
 	fn := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -176,4 +197,39 @@ func (app *application) rateLimit(next http.Handler) http.Handler {
 
 	})
 
+}
+
+// NOTE for me, for CORS just follow the step in BACKEND MASTERCLASS COURSE
+func (app *application) enableCORS(next http.Handler) http.Handler {
+
+	// allowedOrigins := []string{
+	// 	"https://example.com",
+	// 	"https://anotherdomain.com",
+	// 	"https://yetanotherdomain.com",
+	// 	"http://localhost:9000",
+	// }
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// origin := r.Header.Get("Origin")
+
+		// Check if the Origin is in the allowed list
+		// for _, allowedOrigin := range allowedOrigins {
+		// 	if origin == allowedOrigin {
+		// 		w.Header().Set("Access-Control-Allow-Origin", origin)
+		// 		break
+		// 	}
+		// }
+
+		// w.Header().Add("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token")
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+
+		}
+		next.ServeHTTP(w, r)
+	})
 }

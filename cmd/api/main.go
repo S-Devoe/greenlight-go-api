@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"expvar"
 	"flag"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 
@@ -55,6 +57,11 @@ const (
 func main() {
 	var cfg config
 
+	expvar.NewString("version").Set(version)
+	expvar.Publish("goroutines", expvar.Func(func() interface{} {
+		return runtime.NumGoroutine()
+	}))
+
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 	flag.StringVar(&cfg.db.dsn, "db-dsn", dbSource, "POSTGRESQL DSN")
@@ -76,6 +83,26 @@ func main() {
 		log.Fatal("error while connecting to the database ", err)
 		logger.PrintFatal(err, nil)
 	}
+
+	expvar.Publish("database", expvar.Func(func() interface{} {
+		stats := connPool.Stat()
+
+		// Convert the stats to a map for easier printing
+		return map[string]interface{}{
+			"TotalConns":        stats.TotalConns(),
+			"IdleConns":         stats.IdleConns(),
+			"AcquiredConns":     stats.AcquiredConns(),
+			"MaxConns":          stats.MaxConns(),
+			"NewConnsCount":     stats.NewConnsCount(),
+			"AcquireCount":      stats.AcquireCount(),
+			"AcquireDuration":   stats.AcquireDuration(),
+			"EmptyAcquireCount": stats.EmptyAcquireCount(),
+			"ConstructingConns": stats.ConstructingConns(),
+		}
+	}))
+	expvar.Publish("timestamp", expvar.Func(func() interface{} {
+		return time.Now().Unix()
+	}))
 
 	connection, err := connPool.Acquire(context.Background())
 	if err != nil {

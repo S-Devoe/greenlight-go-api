@@ -3,6 +3,7 @@ module github.com/s-devoe/greenlight-go
 go 1.23.4
 
 require (
+	github.com/felixge/httpsnoop v1.0.4
 	github.com/go-mail/mail/v2 v2.3.0
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/julienschmidt/httprouter v1.3.0
