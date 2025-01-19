@@ -23,3 +23,5 @@ EXPOSE 4000
 
 # Command to run the Go binary when the container starts
 CMD ["/app/api"]
+
+

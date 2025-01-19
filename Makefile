@@ -55,12 +55,12 @@ new/migration: confirm
 ## migrate/up: run up migrations
 migrate/up: confirm
 	@echo 'Running up migrations...'
-	migrate -path migrations -database ${GREENLIGHT_DB_DSN} -verbose up
+	migrate -path migrations -database ${DB_SOURCE} -verbose up
 
 ## migrate/down: run down migrations
 migrate/down: confirm
 	@echo 'Running down migrations...'
-	@source .env && migrate -path migrations -database ${GREENLIGHT_DB_DSN} -verbose down
+	@source .env && migrate -path migrations -database ${DB_SOURCE} -verbose down
 
 ## migrate/up1: run the next up migration
 migrate/up1:

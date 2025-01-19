@@ -25,7 +25,8 @@ type config struct {
 	db   struct {
 		dsn string
 	}
-	limiter struct {
+	DB_SOURCE string
+	limiter   struct {
 		rps     float64
 		burst   int
 		enabled bool
@@ -49,9 +50,7 @@ type application struct {
 
 // these are ment to be in .env
 const (
-	dbDriver      = "postgres"
-	dbSource      = "postgresql://greenlight_user:pa55word@localhost:5432/greenlight?sslmode=disable"
-	serverAddress = "0.0.0.0:4000"
+	dbSource = "postgresql://greenlight_user:pa55word@localhost:5432/greenlight?sslmode=disable"
 )
 
 func main() {
@@ -65,6 +64,7 @@ func main() {
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
 	flag.StringVar(&cfg.db.dsn, "db-dsn", dbSource, "POSTGRESQL DSN")
+	flag.StringVar(&cfg.DB_SOURCE, "db-source", dbSource, "POSTGRESQL DSN")
 	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum request per seconds")
 	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
 	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
@@ -78,7 +78,7 @@ func main() {
 
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
-	connPool, err := pgxpool.NewWithConfig(context.Background(), PgxConfig())
+	connPool, err := pgxpool.NewWithConfig(context.Background(), PgxConfig(&cfg))
 	if err != nil {
 		log.Fatal("error while connecting to the database ", err)
 		logger.PrintFatal(err, nil)
@@ -132,7 +132,7 @@ func main() {
 	logger.PrintFatal(err, nil)
 }
 
-func PgxConfig() *pgxpool.Config {
+func PgxConfig(cfg *config) *pgxpool.Config {
 	const defaultMaxConns = int32(4)
 	const defaultMinConns = int32(0)
 	const defaultMaxConnLifetime = time.Hour
@@ -140,7 +140,7 @@ func PgxConfig() *pgxpool.Config {
 	const defaultHealthCheckPeriod = time.Minute
 	const defaultConnecTimeout = time.Second * 50
 
-	dbConfig, err := pgxpool.ParseConfig(dbSource)
+	dbConfig, err := pgxpool.ParseConfig(cfg.DB_SOURCE)
 	if err != nil {
 		log.Fatal("failed to create a config, error:", err)
 	}
