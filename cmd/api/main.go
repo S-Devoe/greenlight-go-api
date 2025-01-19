@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"expvar"
-	"flag"
 	"log"
 	"os"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/s-devoe/greenlight-go/config"
 	"github.com/s-devoe/greenlight-go/internal/data"
 	"github.com/s-devoe/greenlight-go/internal/jsonlog"
 	"github.com/s-devoe/greenlight-go/internal/mailer"
@@ -19,29 +19,29 @@ import (
 
 const version = "1.0.0"
 
-type config struct {
-	port int
-	env  string
-	db   struct {
-		dsn string
-	}
-	DB_SOURCE string
-	limiter   struct {
-		rps     float64
-		burst   int
-		enabled bool
-	}
-	smtp struct {
-		host     string
-		port     int
-		username string
-		password string
-		sender   string
-	}
-}
+// type config struct {
+// 	port int
+// 	env  string
+// 	db   struct {
+// 		dsn string
+// 	}
+// 	DB_SOURCE string
+// 	limiter   struct {
+// 		rps     float64
+// 		burst   int
+// 		enabled bool
+// 	}
+// 	smtp struct {
+// 		host     string
+// 		port     int
+// 		username string
+// 		password string
+// 		sender   string
+// 	}
+// }
 
 type application struct {
-	config config
+	config config.Config
 	logger *jsonlog.Logger
 	store  data.Store
 	mailer mailer.Mailer
@@ -49,32 +49,17 @@ type application struct {
 }
 
 // these are ment to be in .env
-const (
-	dbSource = "postgresql://greenlight_user:pa55word@localhost:5432/greenlight?sslmode=disable"
-)
+// const (
+// 	dbSource = "postgresql://greenlight_user:pa55word@localhost:5432/greenlight?sslmode=disable"
+// )
 
 func main() {
-	var cfg config
+	cfg := config.InitConfig()
 
 	expvar.NewString("version").Set(version)
 	expvar.Publish("goroutines", expvar.Func(func() interface{} {
 		return runtime.NumGoroutine()
 	}))
-
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
-	flag.StringVar(&cfg.db.dsn, "db-dsn", dbSource, "POSTGRESQL DSN")
-	flag.StringVar(&cfg.DB_SOURCE, "db-source", dbSource, "POSTGRESQL DSN")
-	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum request per seconds")
-	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
-	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
-	flag.StringVar(&cfg.smtp.host, "smtp-host", "sandbox.smtp.mailtrap.io", "SMTP host")
-	flag.IntVar(&cfg.smtp.port, "smtp-port", 2525, "SMTP port")
-	flag.StringVar(&cfg.smtp.username, "smtp-username", "d8e6e86f30e9f0", "SMTP username")
-	flag.StringVar(&cfg.smtp.password, "smtp-password", "d16b2255b71d35", "SMTP password")
-	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.alexedwards.net>", "SMTP sender")
-
-	flag.Parse()
 
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
@@ -118,13 +103,14 @@ func main() {
 
 	defer connPool.Close()
 
+	log.Printf("Connected to the database %d", cfg.Port)
 	logger.PrintInfo("database connection established", nil)
 
 	app := &application{
 		logger: logger,
 		config: cfg,
 		store:  data.NewStore(connPool),
-		mailer: mailer.New(cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.sender),
+		mailer: mailer.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPSender),
 	}
 
 	err = app.serve()
@@ -132,7 +118,7 @@ func main() {
 	logger.PrintFatal(err, nil)
 }
 
-func PgxConfig(cfg *config) *pgxpool.Config {
+func PgxConfig(cfg *config.Config) *pgxpool.Config {
 	const defaultMaxConns = int32(4)
 	const defaultMinConns = int32(0)
 	const defaultMaxConnLifetime = time.Hour
@@ -140,7 +126,7 @@ func PgxConfig(cfg *config) *pgxpool.Config {
 	const defaultHealthCheckPeriod = time.Minute
 	const defaultConnecTimeout = time.Second * 50
 
-	dbConfig, err := pgxpool.ParseConfig(cfg.DB_SOURCE)
+	dbConfig, err := pgxpool.ParseConfig(cfg.DbSource)
 	if err != nil {
 		log.Fatal("failed to create a config, error:", err)
 	}
