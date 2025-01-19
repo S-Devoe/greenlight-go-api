@@ -60,7 +60,7 @@ migrate/up: confirm
 ## migrate/down: run down migrations
 migrate/down: confirm
 	@echo 'Running down migrations...'
-	@source .env && migrate -path migrations -database ${DB_SOURCE} -verbose down
+	migrate -path migrations -database ${DB_SOURCE} -verbose down
 
 ## migrate/up1: run the next up migration
 migrate/up1:
