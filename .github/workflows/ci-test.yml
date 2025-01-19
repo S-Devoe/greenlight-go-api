@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    name: Test And Migrate up
+    name: Test And Migration
     runs-on: ubuntu-latest
 
     services:
