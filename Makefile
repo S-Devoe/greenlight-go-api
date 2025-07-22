@@ -33,7 +33,7 @@ stop-docker-container:
 ## createdb: create the greenlight database
 createdb:
 	docker exec -it greenlight-postgres createdb -U greenlight -O  greenlight
-# meaning of the above command: docker execute -iterative container-name createdb -username=root -owner=root database-name
+# meaning of the above command: docker execute -iterative container-name createdb -username=greenlight -owner=greenlight database-name
 
 ## dropdb: drop the greenlight database
 dropdb:
@@ -44,7 +44,7 @@ dropdb:
 # 	@echo 'Creating new migration files for ${name}...'; \
 # 	migrate create -ext sql -dir migrations -seq $(name)
 
-# with the method below, the command line will as me for the migration name   
+# with the method below, the command line will ask me for the migration name   
 
 ## new/migration: create a new migration file
 new/migration: confirm
@@ -75,11 +75,10 @@ run:
 	go run ./cmd/api
 
 #================================================================#
-
 #QUALITY CONTROL
 #================================================================#
 
-## audit: tidy dependencies and format,vet, and test all code
+## audit: tidy dependencies and format, vet, and test all code
 audit:
 	@echo 'Tidying and verifying dependencies...'
 	go mod tidy

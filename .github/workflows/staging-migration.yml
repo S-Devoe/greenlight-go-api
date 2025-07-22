@@ -1,0 +1,32 @@
+name: deployment-staging
+
+on:
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  migrate:
+    name: Migrate Staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.24.4
+        id: go
+
+      - name: Check out code with Go module repository
+        uses: actions/checkout@v4
+
+      - name: install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/bin/
+          which migrate
+
+      - name: Run migrations
+        run: migrate -path db/migrations -database "${{ secrets.STAGING_DB_SOURCE }}" -verbose up
