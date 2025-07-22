@@ -31,4 +31,4 @@ jobs:
           which migrate
 
       - name: Run migrations
-        run: migrate -path db/migrations -database "${{ secrets.STAGING_DB_SOURCE }}" -verbose up
+        run: migrate -path migrations -database "${{ secrets.STAGING_DB_SOURCE }}" -verbose up
